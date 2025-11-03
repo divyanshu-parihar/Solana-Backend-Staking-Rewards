@@ -1,0 +1,30 @@
+module.exports = {
+  moduleFileExtensions: ['js', 'json', 'ts'],
+  rootDir: '.',
+  testRegex: '.*\\.spec\\.ts$',
+  transform: {
+    '^.+\\.(t|j)s$': 'ts-jest',
+  },
+  silent: false,
+  verbose: true,
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+  collectCoverageFrom: [
+    'src/**/*.(t|j)s',
+    '!src/main.ts',
+    '!src/**/*.module.ts',
+    '!src/**/*.dto.ts',
+    '!src/**/*.interface.ts',
+  ],
+  coverageDirectory: './coverage',
+  testEnvironment: 'node',
+  roots: ['<rootDir>/src/', '<rootDir>/test/'],
+  moduleNameMapper: {
+    '^@modules/(.*)$': '<rootDir>/src/modules/$1',
+    '^@common/(.*)$': '<rootDir>/src/common/$1',
+    '^@config/(.*)$': '<rootDir>/src/config/$1',
+    '^@utils/(.*)$': '<rootDir>/src/utils/$1',
+    '^@observability/(.*)$': '<rootDir>/src/observability/$1',
+    '^@prisma/prisma.service$': '<rootDir>/src/prisma/prisma.service',
+    '^@prisma/prisma.module$': '<rootDir>/src/prisma/prisma.module',
+  },
+};

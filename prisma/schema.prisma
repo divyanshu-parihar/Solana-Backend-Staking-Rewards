@@ -1,0 +1,168 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  wallet    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions       Session[]
+  stakePositions StakePosition[]
+  rewardNfts     RewardNft[]
+
+  @@index([wallet])
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  jwtId     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([jwtId])
+  @@map("sessions")
+}
+
+model ProgramState {
+  id                    String   @id @default(uuid())
+  programId             String   @unique
+  rewardTokenMint       String
+  isPaused              Boolean  @default(false)
+  currentEpoch          BigInt   @default(0)
+  currentEpochStartTs   BigInt?
+  currentWeeklyEmission BigInt?
+  totalStaked           BigInt   @default(0)
+  totalRewardPool       BigInt   @default(0)
+  totalStakingPower     BigInt   @default(0)
+  updatedAt             DateTime @updatedAt
+
+  @@index([programId])
+  @@map("program_states")
+}
+
+model StakingTier {
+  id               String   @id @default(uuid())
+  tierId           Int      @unique
+  multiplier       BigInt
+  minMonths        Int
+  maxMonths        Int
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  stakePositions StakePosition[]
+
+  @@index([tierId])
+  @@map("staking_tiers")
+}
+
+model StakePosition {
+  id                   String   @id @default(uuid())
+  owner                String
+  pda                  String   @unique
+  amount               BigInt
+  durationMonths       Int
+  tierId               Int
+  isLocked             Boolean
+  powerMultiplier      BigInt
+  stakingPower         BigInt
+  startTs              BigInt
+  unlockTs             BigInt
+  lastRewardTs         BigInt
+  lastClaimTs          BigInt?
+  cooldownEnd          BigInt?
+  pendingPrincipal     BigInt?
+  isActive             Boolean  @default(true)
+  positionSeed         BigInt
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user         User         @relation(fields: [owner], references: [wallet], onDelete: Cascade)
+  tier         StakingTier  @relation(fields: [tierId], references: [tierId])
+  rewardNfts   RewardNft[]
+
+  @@index([owner])
+  @@index([pda])
+  @@index([isActive])
+  @@map("stake_positions")
+}
+
+model RewardNft {
+  id            String   @id @default(uuid())
+  owner         String
+  pda           String   @unique
+  nftAsset      String
+  rewardAmount  BigInt
+  vestTs        BigInt
+  isActive      Boolean  @default(true)
+  nftSeed       BigInt
+  positionId    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user          User           @relation(fields: [owner], references: [wallet], onDelete: Cascade)
+  position      StakePosition? @relation(fields: [positionId], references: [id])
+
+  @@index([owner])
+  @@index([nftAsset])
+  @@index([isActive])
+  @@map("reward_nfts")
+}
+
+model Event {
+  id          String   @id @default(uuid())
+  signature   String   @unique
+  programId   String
+  instruction String
+  slot        BigInt
+  timestamp   BigInt
+  commitment  String   @default("confirmed")
+  finalized   Boolean  @default(false)
+  payload     Json
+  createdAt   DateTime @default(now())
+
+  @@index([signature])
+  @@index([slot])
+  @@index([instruction])
+  @@index([programId])
+  @@map("events")
+}
+
+model ComplianceStatus {
+  id        String   @id @default(uuid())
+  wallet    String   @unique
+  status    String
+  source    String?
+  updatedAt DateTime @updatedAt
+
+  @@index([wallet])
+  @@map("compliance_status")
+}
+
+model IdempotencyRecord {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  wallet      String
+  endpoint    String
+  requestBody Json
+  response    Json
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  @@index([key])
+  @@index([wallet])
+  @@index([expiresAt])
+  @@map("idempotency_records")
+}
