@@ -139,11 +139,57 @@ export class StakingService {
 
       const isEarlyUnstake = now < Number(position.unlockTs);
 
+      // Calculate penalty for early unstake
+      let penaltyAmount = 0;
+      let toRewardPool = 0;
+      let toProtocol = 0;
+      let principalAfterPenalty = Number(position.amount);
+
+      if (isEarlyUnstake) {
+        const tierMultiplier = this.getTierPenaltyMultiplier(position.tierId);
+        penaltyAmount = Math.floor((Number(position.amount) * tierMultiplier) / 10000);
+
+        // Split penalty 50% to reward pool / 50% to protocol
+        toRewardPool = Math.floor(penaltyAmount / 2);
+        toProtocol = Math.floor(penaltyAmount / 2);
+
+        principalAfterPenalty = Number(position.amount) - penaltyAmount;
+
+        // Create penalty transaction record
+        await this.prisma.penaltyTransaction.create({
+          data: {
+            positionId: position.id,
+            wallet,
+            penaltyAmount: BigInt(penaltyAmount),
+            toRewardPool: BigInt(toRewardPool),
+            toProtocol: BigInt(toProtocol),
+            tierMultiplier,
+          },
+        });
+
+        // Update reward pool with 50% of penalty
+        const programState = await this.prisma.programState.findFirst();
+        if (programState) {
+          await this.prisma.programState.update({
+            where: { id: programState.id },
+            data: {
+              totalRewardPool: {
+                increment: BigInt(toRewardPool),
+              },
+            },
+          });
+        }
+
+        this.logger.log(
+          `Early unstake penalty applied: ${penaltyAmount} (Tier ${position.tierId}, ${tierMultiplier / 100}%)`,
+        );
+      }
+
       await this.prisma.stakePosition.update({
         where: { pda: stakePositionPda.toString() },
         data: {
           cooldownEnd: BigInt(cooldownEnd),
-          pendingPrincipal: position.amount,
+          pendingPrincipal: BigInt(principalAfterPenalty),
           isActive: false,
         },
       });
@@ -322,5 +368,16 @@ export class StakingService {
     if (durationMonths >= 24 && durationMonths <= 35) return 300;
     if (durationMonths >= 36) return 400;
     return 100;
+  }
+
+  private getTierPenaltyMultiplier(tierId: number): number {
+    // Return basis points (10000 = 100%)
+    const tierPenalties: Record<number, number> = {
+      1: 500, // 5% for tier 1 (1-3 months)
+      2: 750, // 7.5% for tier 2 (6-12 months)
+      3: 1000, // 10% for tier 3 (12-24 months)
+      4: 1250, // 12.5% for tier 4 (24+ months)
+    };
+    return tierPenalties[tierId] || 500;
   }
 }

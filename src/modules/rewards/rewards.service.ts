@@ -87,6 +87,8 @@ export class RewardsService {
       const vestingPeriod = this.configService.get<number>('staking.vestingPeriod') || 31536000;
       const vestTimestamp = now + vestingPeriod;
 
+      // NFT vesting behavior: No rewards accrue during vesting period
+      // NFT acts as time-locked, tradable receipt only
       const rewardNft = await this.prisma.rewardNft.create({
         data: {
           id: uuidv4(),
@@ -269,8 +271,19 @@ export class RewardsService {
     const emissionPrecision = 10000;
 
     const weeklyPoolEmission = Math.floor((rewardPool * weeklyEmissionRate) / emissionPrecision);
-    const userWeeklyShare = Math.floor((weeklyPoolEmission * userStakingPower) / totalStakingPower);
+
+    // Split weekly emission: 40% staking / 30% referral / 30% cashback
+    const stakingPoolShare = Math.floor((weeklyPoolEmission * 40) / 100); // 40% for staking rewards
+    const referralPoolShare = Math.floor((weeklyPoolEmission * 30) / 100); // 30% for referral program
+    const cashbackPoolShare = Math.floor((weeklyPoolEmission * 30) / 100); // 30% for cashback
+
+    // User's reward comes from staking pool only (40% portion)
+    const userWeeklyShare = Math.floor((stakingPoolShare * userStakingPower) / totalStakingPower);
     const totalReward = userWeeklyShare * weeks;
+
+    this.logger.debug(
+      `Reward calculation: Weekly emission ${weeklyPoolEmission}, Staking pool ${stakingPoolShare}, User share ${userWeeklyShare}`,
+    );
 
     return this.applyApyCap(userStakingPower, totalReward, weeks);
   }

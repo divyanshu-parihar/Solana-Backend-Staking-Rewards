@@ -13,9 +13,11 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  sessions       Session[]
-  stakePositions StakePosition[]
-  rewardNfts     RewardNft[]
+  sessions             Session[]
+  stakePositions       StakePosition[]
+  rewardNfts           RewardNft[]
+  cashbackTransactions CashbackTransaction[]
+  deviceFingerprints   DeviceFingerprint[]
 
   @@index([wallet])
   @@map("users")
@@ -89,9 +91,10 @@ model StakePosition {
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
-  user         User         @relation(fields: [owner], references: [wallet], onDelete: Cascade)
-  tier         StakingTier  @relation(fields: [tierId], references: [tierId])
-  rewardNfts   RewardNft[]
+  user                 User                  @relation(fields: [owner], references: [wallet], onDelete: Cascade)
+  tier                 StakingTier           @relation(fields: [tierId], references: [tierId])
+  rewardNfts           RewardNft[]
+  penaltyTransactions  PenaltyTransaction[]
 
   @@index([owner])
   @@index([pda])
@@ -165,4 +168,120 @@ model IdempotencyRecord {
   @@index([wallet])
   @@index([expiresAt])
   @@map("idempotency_records")
+}
+
+model StakingSnapshot {
+  id           String   @id @default(uuid())
+  userId       String
+  wallet       String
+  totalStaked  BigInt
+  snapshotDate DateTime @default(now())
+
+  @@index([userId, snapshotDate])
+  @@index([wallet, snapshotDate])
+  @@map("staking_snapshots")
+}
+
+model CashbackPool {
+  id           String    @id @default(uuid())
+  poolType     String
+  balance      BigInt    @default(0)
+  lastFundedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([poolType])
+  @@map("cashback_pools")
+}
+
+model CashbackTransaction {
+  id              String   @id @default(uuid())
+  userId          String
+  wallet          String
+  amount          BigInt
+  poolType        String
+  transactionType String
+  metadata        Json?
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [wallet], references: [wallet], onDelete: Cascade)
+
+  @@index([wallet])
+  @@index([poolType])
+  @@map("cashback_transactions")
+}
+
+model Referral {
+  id               String   @id @default(uuid())
+  referrerWallet   String
+  referredWallet   String   @unique
+  welcomeBonusPaid Boolean  @default(false)
+  totalRewards     BigInt   @default(0)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([referrerWallet])
+  @@index([referredWallet])
+  @@map("referrals")
+}
+
+model ReferralReward {
+  id             String   @id @default(uuid())
+  referralId     String
+  referrerWallet String
+  amount         BigInt
+  epoch          BigInt
+  createdAt      DateTime @default(now())
+
+  @@index([referrerWallet])
+  @@index([epoch])
+  @@map("referral_rewards")
+}
+
+model PenaltyTransaction {
+  id             String   @id @default(uuid())
+  positionId     String
+  wallet         String
+  penaltyAmount  BigInt
+  toRewardPool   BigInt
+  toProtocol     BigInt
+  tierMultiplier Int
+  createdAt      DateTime @default(now())
+
+  position StakePosition @relation(fields: [positionId], references: [id], onDelete: Cascade)
+
+  @@index([wallet])
+  @@index([positionId])
+  @@map("penalty_transactions")
+}
+
+model RevenueTransaction {
+  id               String   @id @default(uuid())
+  source           String
+  amount           BigInt
+  toRewardPool     BigInt?
+  toCashbackPool   BigInt?
+  transactionHash  String?
+  createdAt        DateTime @default(now())
+
+  @@index([source])
+  @@index([createdAt])
+  @@map("revenue_transactions")
+}
+
+model DeviceFingerprint {
+  id        String   @id @default(uuid())
+  wallet    String
+  deviceId  String
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [wallet], references: [wallet], onDelete: Cascade)
+
+  @@index([wallet])
+  @@index([deviceId])
+  @@index([ipAddress])
+  @@map("device_fingerprints")
 }

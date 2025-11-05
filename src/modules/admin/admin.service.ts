@@ -346,4 +346,132 @@ export class AdminService {
       throw error;
     }
   }
+
+  async recordRevenueReplenishment(
+    wallet: string,
+    source: string,
+    amount: number,
+    transactionHash?: string,
+  ) {
+    this.checkAdminAccess(wallet);
+
+    try {
+      // Calculate allocation: 5% to reward pool, 5% to cashback pool (split 2%/3%)
+      const toRewardPool = Math.floor((amount * 5) / 100);
+      const toCashbackPerpetual = Math.floor((amount * 2) / 100);
+      const toCashbackBonus = Math.floor((amount * 3) / 100);
+      const totalCashback = toCashbackPerpetual + toCashbackBonus;
+
+      // Create revenue transaction record with proofs
+      await this.prisma.revenueTransaction.create({
+        data: {
+          source,
+          amount: BigInt(amount),
+          toRewardPool: BigInt(toRewardPool),
+          toCashbackPool: BigInt(totalCashback),
+          transactionHash: transactionHash || null,
+        },
+      });
+
+      // Update reward pool
+      const programState = await this.prisma.programState.findFirst();
+      if (programState) {
+        await this.prisma.programState.update({
+          where: { id: programState.id },
+          data: {
+            totalRewardPool: { increment: BigInt(toRewardPool) },
+          },
+        });
+      }
+
+      // Update cashback pools
+      const perpetualPool = await this.prisma.cashbackPool.findFirst({
+        where: { poolType: 'PERPETUAL' },
+      });
+
+      const bonusPool = await this.prisma.cashbackPool.findFirst({
+        where: { poolType: 'BONUS' },
+      });
+
+      if (perpetualPool && bonusPool) {
+        await this.prisma.cashbackPool.update({
+          where: { id: perpetualPool.id },
+          data: {
+            balance: { increment: BigInt(toCashbackPerpetual) },
+            lastFundedAt: new Date(),
+          },
+        });
+
+        await this.prisma.cashbackPool.update({
+          where: { id: bonusPool.id },
+          data: {
+            balance: { increment: BigInt(toCashbackBonus) },
+            lastFundedAt: new Date(),
+          },
+        });
+      }
+
+      this.logger.log(
+        `Revenue replenishment recorded: ${amount} (Reward pool: ${toRewardPool}, Cashback: ${totalCashback})`,
+      );
+
+      return {
+        source,
+        totalAmount: amount,
+        toRewardPool,
+        toCashbackPerpetual,
+        toCashbackBonus,
+        transactionHash: transactionHash || null,
+        message: 'Revenue replenishment recorded with transaction proofs',
+      };
+    } catch (error) {
+      const isTestMode = process.env.NODE_ENV === 'test';
+      const isExpectedError =
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException;
+
+      if (!isTestMode || !isExpectedError) {
+        this.logger.error(`Record revenue error: ${error.message}`, error.stack);
+      }
+      throw error;
+    }
+  }
+
+  async getRevenueHistory(limit: number = 50) {
+    try {
+      const transactions = await this.prisma.revenueTransaction.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      });
+
+      const totalRevenue = transactions.reduce((sum, tx) => sum + Number(tx.amount), 0);
+      const totalToRewardPool = transactions.reduce(
+        (sum, tx) => sum + Number(tx.toRewardPool || 0),
+        0,
+      );
+      const totalToCashback = transactions.reduce(
+        (sum, tx) => sum + Number(tx.toCashbackPool || 0),
+        0,
+      );
+
+      return {
+        totalRevenue: totalRevenue.toString(),
+        totalToRewardPool: totalToRewardPool.toString(),
+        totalToCashback: totalToCashback.toString(),
+        transactionCount: transactions.length,
+        transactions: transactions.map((tx) => ({
+          source: tx.source,
+          amount: tx.amount.toString(),
+          toRewardPool: tx.toRewardPool?.toString() || '0',
+          toCashbackPool: tx.toCashbackPool?.toString() || '0',
+          transactionHash: tx.transactionHash,
+          createdAt: tx.createdAt,
+        })),
+      };
+    } catch (error) {
+      this.logger.error(`Get revenue history error: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
 }

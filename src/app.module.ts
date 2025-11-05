@@ -21,7 +21,9 @@ import { AllExceptionsFilter } from './common/errors/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { MetricsInterceptor } from './common/interceptors/metrics.interceptor';
 import { IdempotencyMiddleware } from './common/middleware/idempotency.middleware';
-
+import { ReferralModule } from './modules/referral/referral.module';
+import { CashbackModule } from './modules/cashback/cashback.module';
+import { DiscountModule } from './modules/discount/discount.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -48,6 +50,9 @@ import { IdempotencyMiddleware } from './common/middleware/idempotency.middlewar
     IndexerModule,
     ComplianceModule,
     InsightsModule,
+    ReferralModule,
+    CashbackModule,
+    DiscountModule,
   ],
   providers: [
     {
